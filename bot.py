@@ -8,11 +8,10 @@ import secrets
 import re
 import urllib.parse
 from Crypto.Cipher import AES
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import CommandStart
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, CallbackQuery
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
+from aiogram import Bot, Dispatcher, types
+from aiogram.contrib.middlewares.logging import LoggingMiddleware
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
+from aiogram.utils import executor
 
 # ================= CONFIG =================
 API_TOKEN = "8606851269:AAE5FPOPUU0Zgg18kZ9orSgbbDRbzQQ1Q68"
@@ -28,19 +27,14 @@ FIXED_KEY = "RDX_FIXED_KEY_2024"
 SALT = b"rdx_salt_2024"
 ITERATIONS = 100000
 KEY_LEN = 32
-DECODER_PASSWORD = "𝕽𝕯𝖃 𝕺𝖂𝕹𝕰𝕽"
+DECODER_PASSWORD = "RDXOWNER7"
 
 bot = Bot(token=API_TOKEN)
-dp = Dispatcher()
+dp = Dispatcher(bot)
 
-# ================= STATES =================
-class BotStates(StatesGroup):
-    wait_for_password = State()
-    wait_for_encrypt_file = State()
-    wait_for_t1_file = State()
-    wait_for_t2_file = State()
-    wait_for_t3_file = State()
-    wait_for_t4_file = State()
+# ================= STATES (Simple dict based) =================
+user_states = {}
+user_encrypt_state = {}
 
 # ================= FORCE JOIN =================
 async def check_join(user_id):
@@ -55,8 +49,8 @@ async def check_join(user_id):
 # ================= UI HELPERS =================
 def premium_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔐 ENCRYPTION ENGINE (V5)", callback_data="menu_encrypt")],
-        [InlineKeyboardButton(text="🔓 DECODER SYSTEM (Login)", callback_data="menu_decode_login")],
+        [InlineKeyboardButton(text="🔐 ENCRYPTION ENGINE", callback_data="menu_encrypt")],
+        [InlineKeyboardButton(text="🔓 DECODER SYSTEM", callback_data="menu_decode_login")],
         [InlineKeyboardButton(text="✦ CONTACT DEVELOPER ✦", url="https://t.me/RDX_OWNER_7")]
     ])
 
@@ -71,129 +65,112 @@ def decoder_keyboard():
 
 async def process_ui(msg):
     steps = [
-        "⚙ `INITIALIZING RDX CORE...`\n`[■■□□□□□□□□] 20%`",
-        "🔐 `ANALYZING PROTOCOL...`\n`[■■■■■□□□□□] 50%`",
-        "🛡 `EXECUTING ENGINE LOGIC...`\n`[■■■■■■■■□□] 80%`",
-        "🚀 `FINALIZING PAYLOAD...`\n`[■■■■■■■■■■] 100%`"
+        "⚙ INITIALIZING RDX CORE...\n[■■□□□□□□□□] 20%",
+        "🔐 ANALYZING PROTOCOL...\n[■■■■■□□□□□] 50%",
+        "🛡 EXECUTING ENGINE LOGIC...\n[■■■■■■■■□□] 80%",
+        "🚀 FINALIZING PAYLOAD...\n[■■■■■■■■■■] 100%"
     ]
     for s in steps:
         try:
-            await msg.edit_text(s, parse_mode="Markdown")
+            await msg.edit_text(s)
         except:
             pass
         await asyncio.sleep(0.6)
 
 # ================= START =================
-@dp.message(CommandStart())
-async def start(message: types.Message, state: FSMContext):
-    await state.clear()
+@dp.message_handler(commands=['start'])
+async def start(message: types.Message):
+    user_states[message.from_user.id] = None
+    user_encrypt_state[message.from_user.id] = None
+    
     if not await check_join(message.from_user.id):
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="📢 Join Channel 1", url=CHANNEL_1_LINK)],
             [InlineKeyboardButton(text="📢 Join Channel 2", url=CHANNEL_2_LINK)],
             [InlineKeyboardButton(text="✅ I've Joined", callback_data="check")]
         ])
-        await message.reply("🚫 **AUTHENTICATION REQUIRED**\n\nAccess Denied. Join both channels to sync to the server.", reply_markup=kb, parse_mode="Markdown")
+        await message.reply("🚫 AUTHENTICATION REQUIRED\n\nAccess Denied. Join both channels first.", reply_markup=kb)
         return
 
     await message.reply(
-        "⚡ **RDX MASTER SYSTEM** ⚡\n"
-        "`DECODER & ENCODER · VER 4.0`\n\n"
-        "**SELECT PROTOCOL:**\n\n"
-        "• 🔐 **ENCODER:** AES-256-CBC + PBKDF2 HTML Protection\n"
-        "• 🔓 **DECODER:** 4 Advanced Bypass Engines (Protected)\n\n"
-        "💀 **@RDX_OWNER_7**",
-        reply_markup=premium_keyboard(),
-        parse_mode="Markdown"
+        "⚡ RDX MASTER SYSTEM ⚡\n"
+        "DECODER & ENCODER · VER 4.0\n\n"
+        "SELECT PROTOCOL:\n\n"
+        "• 🔐 ENCODER: AES-256-CBC + PBKDF2 HTML Protection\n"
+        "• 🔓 DECODER: 4 Advanced Bypass Engines\n\n"
+        "💀 @RDX_OWNER_7",
+        reply_markup=premium_keyboard()
     )
 
-@dp.callback_query(F.data == "check")
-async def check_join_callback(call: CallbackQuery, state: FSMContext):
+@dp.callback_query_handler(lambda c: c.data == "check")
+async def check_join_callback(call: types.CallbackQuery):
     if await check_join(call.from_user.id):
         await call.message.delete()
-        await start(call.message, state)
+        await start(call.message)
     else:
         await call.answer("❌ You haven't joined both channels yet!", show_alert=True)
 
-@dp.callback_query(F.data == "back_main")
-async def back_to_main(call: CallbackQuery, state: FSMContext):
-    await state.clear()
+@dp.callback_query_handler(lambda c: c.data == "back_main")
+async def back_to_main(call: types.CallbackQuery):
+    user_states[call.from_user.id] = None
+    user_encrypt_state[call.from_user.id] = None
     await call.message.delete()
-    await start(call.message, state)
+    await start(call.message)
 
 # ================= MENU HANDLERS =================
-@dp.callback_query(F.data == "menu_encrypt")
-async def ask_encrypt(call: CallbackQuery, state: FSMContext):
+@dp.callback_query_handler(lambda c: c.data == "menu_encrypt")
+async def ask_encrypt(call: types.CallbackQuery):
     await call.answer()
-    await state.set_state(BotStates.wait_for_encrypt_file)
+    user_encrypt_state[call.from_user.id] = "waiting"
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="← BACK", callback_data="back_main")]])
     await call.message.edit_text(
-        "🔐 **PROTOCOL 05: ENCRYPTION ENGINE**\n\n"
-        "`AES-256-CBC + PBKDF2 · HTML Protection`\n\n"
-        "📁 **Send your .html file to encrypt.**\n"
-        "⚠️ _File will be strictly protected with our stealth loader._\n\n"
+        "🔐 PROTOCOL 05: ENCRYPTION ENGINE\n\n"
+        "AES-256-CBC + PBKDF2 · HTML Protection\n\n"
+        "📁 Send your .html file to encrypt.\n\n"
         "👑 @RDX_OWNER_7",
-        reply_markup=kb,
-        parse_mode="Markdown"
+        reply_markup=kb
     )
 
-@dp.callback_query(F.data == "menu_decode_login")
-async def ask_password(call: CallbackQuery, state: FSMContext):
+@dp.callback_query_handler(lambda c: c.data == "menu_decode_login")
+async def ask_password(call: types.CallbackQuery):
     await call.answer()
-    await state.set_state(BotStates.wait_for_password)
+    user_states[call.from_user.id] = "waiting_password"
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="← CANCEL", callback_data="back_main")]])
     await call.message.edit_text(
-        "🔒 **AUTHENTICATION REQUIRED**\n\n"
-        "`ENTER SYSTEM PASSWORD TO UNLOCK DECODER ENGINES...`",
-        reply_markup=kb,
-        parse_mode="Markdown"
+        "🔒 AUTHENTICATION REQUIRED\n\n"
+        "ENTER SYSTEM PASSWORD TO UNLOCK DECODER ENGINES...\n\n"
+        "Password: RDXOWNER7",
+        reply_markup=kb
     )
 
-# ================= PASSWORD HANDLER =================
-@dp.message(BotStates.wait_for_password)
-async def verify_password(message: types.Message, state: FSMContext):
-    if message.text.strip() == DECODER_PASSWORD:
-        await state.clear()
-        await message.reply(
-            "✅ **AUTHENTICATION SUCCESSFUL**\n\n"
-            "🔓 `DECODER SYSTEM UNLOCKED`\n\n"
-            "Select a Decoding Protocol below:",
-            reply_markup=decoder_keyboard(),
-            parse_mode="Markdown"
-        )
-    else:
-        await message.reply("⛔ **ACCESS DENIED** — Invalid Credentials.\nTry again or type /start")
-
-# ================= DECODER SELECTION =================
-@dp.callback_query(F.data.startswith("dec_"))
-async def setup_decoder(call: CallbackQuery, state: FSMContext):
+@dp.callback_query_handler(lambda c: c.data.startswith("dec_"))
+async def setup_decoder(call: types.CallbackQuery):
     await call.answer()
     proto = call.data
     
     if proto == "dec_t1":
-        await state.set_state(BotStates.wait_for_t1_file)
-        title = "01: V3 ENGINE (Recursive Hooking)"
+        user_states[call.from_user.id] = "waiting_t1"
+        title = "01: V3 ENGINE"
     elif proto == "dec_t2":
-        await state.set_state(BotStates.wait_for_t2_file)
-        title = "02: DOM ENGINE (Auto Extraction)"
+        user_states[call.from_user.id] = "waiting_t2"
+        title = "02: DOM ENGINE"
     elif proto == "dec_t3":
-        await state.set_state(BotStates.wait_for_t3_file)
-        title = "03: NEXUS ENGINE (Anti-Cheat Bypass)"
+        user_states[call.from_user.id] = "waiting_t3"
+        title = "03: NEXUS ENGINE"
     elif proto == "dec_t4":
-        await state.set_state(BotStates.wait_for_t4_file)
-        title = "04: VISUAL ENGINE (Perfect Visual)"
+        user_states[call.from_user.id] = "waiting_t4"
+        title = "04: VISUAL ENGINE"
     else:
         return
         
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="← CANCEL", callback_data="back_main")]])
     await call.message.edit_text(
-        f"⚙ **PROTOCOL {title}**\n\n"
-        "📁 **Send the encrypted .html file you want to decode.**",
-        reply_markup=kb,
-        parse_mode="Markdown"
+        f"⚙ PROTOCOL {title}\n\n"
+        "📁 Send the encrypted .html file you want to decode.",
+        reply_markup=kb
     )
 
-# ================= 100% UNTOUCHED ENCRYPTION ENGINE (STEALTH) =================
+# ================= ENCRYPTION ENGINE =================
 def encrypt_html(plaintext: str, password: str, username: str, user_id: int) -> str:
     key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), SALT, ITERATIONS, dklen=KEY_LEN)
     iv = secrets.token_bytes(16)
@@ -266,7 +243,7 @@ IF YOU REMOVE THIS, FILE WILL BE DESTROYED.
 </body>
 </html>"""
 
-# ================= NEW DECODER LOGIC (REAL AES-256 CRACKING) =================
+# ================= DECODER ENGINES =================
 def aes_decrypt_core(ct_bytes, iv_bytes, key_bytes):
     cipher = AES.new(key_bytes, AES.MODE_CBC, iv_bytes)
     dec = cipher.decrypt(ct_bytes)
@@ -274,7 +251,6 @@ def aes_decrypt_core(ct_bytes, iv_bytes, key_bytes):
     return dec[:-pad_len].decode('utf-8', errors='ignore')
 
 def run_dom_engine(html_content):
-    # CRACK METHOD 1: JS Encoder (HTML Tool 5 Format)
     enc_m = re.search(r'const\s+encData\s*=\s*["\']([^"\']+)["\']', html_content)
     key_m = re.search(r'const\s+key\s*=\s*["\']([^"\']+)["\']', html_content)
     if enc_m and key_m:
@@ -288,7 +264,6 @@ def run_dom_engine(html_content):
         except Exception:
             pass
 
-    # CRACK METHOD 2: Python Bot Stealth Loader Format
     stealth = re.search(r"\)\(window,\s*['\"]([^'\"]+)['\"]\)", html_content)
     if stealth:
         try:
@@ -304,11 +279,9 @@ def run_dom_engine(html_content):
                 return aes_decrypt_core(ct, iv, key)
         except Exception:
             pass
-
     return None
 
 def run_v3_engine(html_content):
-    # Hex Array extraction logic (T1 format)
     hex_match = re.findall(r'["\']((?:[0-9a-fA-F]{2})+)["\']', html_content)
     if hex_match:
         for h in hex_match:
@@ -322,7 +295,6 @@ def run_v3_engine(html_content):
     return run_dom_engine(html_content)
 
 def run_nexus_engine(html_content):
-    # Look for pure base64 document.write payloads
     b64_match = re.findall(r'atob\(\s*["\']([A-Za-z0-9+/=]+)["\']\s*\)', html_content)
     for b in b64_match:
         try:
@@ -346,13 +318,14 @@ def run_visual_engine(html_content):
         return unescaped
     return None
 
-# ================= FILE HANDLER (ROUTER) =================
-@dp.message(F.document)
-async def handle_document(message: types.Message, state: FSMContext):
-    current_state = await state.get_state()
+# ================= FILE HANDLER =================
+@dp.message_handler(content_types=['document'])
+async def handle_document(message: types.Message):
+    user_id = message.from_user.id
+    state = user_states.get(user_id)
+    encrypt_state = user_encrypt_state.get(user_id)
     
-    if current_state not in [BotStates.wait_for_encrypt_file.state, BotStates.wait_for_t1_file.state, 
-                             BotStates.wait_for_t2_file.state, BotStates.wait_for_t3_file.state, BotStates.wait_for_t4_file.state]:
+    if not state and not encrypt_state:
         await message.reply("📁 Send a file only after selecting an option from the menu.\nUse /start")
         return
 
@@ -360,7 +333,7 @@ async def handle_document(message: types.Message, state: FSMContext):
         await message.reply("❌ Only .html or .txt files are allowed!")
         return
 
-    msg = await message.reply("⚡ `DOWNLOADING PAYLOAD...`", parse_mode="Markdown")
+    msg = await message.reply("⚡ DOWNLOADING PAYLOAD...")
     await process_ui(msg)
 
     try:
@@ -378,34 +351,42 @@ async def handle_document(message: types.Message, state: FSMContext):
         action_name = ""
         output_name = ""
 
-        # ROUTING BASED ON STATE
-        if current_state == BotStates.wait_for_encrypt_file.state:
+        # ENCRYPT
+        if encrypt_state == "waiting":
             action_name = "Encryption"
             final_code = encrypt_html(html_code, FIXED_KEY, username, user_id)
             output_name = f"RDX_ENC_{user_id}.html"
             
-        else:
+        # DECRYPT
+        elif state == "waiting_t1":
             action_name = "Decryption"
+            final_code = run_v3_engine(html_code)
             output_name = f"RDX_DEC_{user_id}.html"
-            
-            # RUN EXACT ENGINES
-            if current_state == BotStates.wait_for_t1_file.state:
-                final_code = run_v3_engine(html_code)
-            elif current_state == BotStates.wait_for_t2_file.state:
-                final_code = run_dom_engine(html_code)
-            elif current_state == BotStates.wait_for_t3_file.state:
-                final_code = run_nexus_engine(html_code)
-            elif current_state == BotStates.wait_for_t4_file.state:
-                final_code = run_visual_engine(html_code)
+        elif state == "waiting_t2":
+            action_name = "Decryption"
+            final_code = run_dom_engine(html_code)
+            output_name = f"RDX_DEC_{user_id}.html"
+        elif state == "waiting_t3":
+            action_name = "Decryption"
+            final_code = run_nexus_engine(html_code)
+            output_name = f"RDX_DEC_{user_id}.html"
+        elif state == "waiting_t4":
+            action_name = "Decryption"
+            final_code = run_visual_engine(html_code)
+            output_name = f"RDX_DEC_{user_id}.html"
+        else:
+            await msg.delete()
+            await message.reply("Please select an option first using /start")
+            return
 
-            if not final_code:
-                await msg.delete()
-                kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="← BACK", callback_data="back_main")]])
-                await message.reply("⛔ **DECRYPTION FAILED!**\n\nFile format could not be decoded. The file might not be encrypted by our engine or is corrupted.", reply_markup=kb, parse_mode="Markdown")
-                await state.clear()
-                return
+        if not final_code:
+            await msg.delete()
+            kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="← BACK", callback_data="back_main")]])
+            await message.reply("⛔ DECRYPTION FAILED!\n\nFile could not be decoded.", reply_markup=kb)
+            user_states[user_id] = None
+            user_encrypt_state[user_id] = None
+            return
 
-        # Save File
         with open(output_name, "w", encoding="utf-8") as f:
             f.write(final_code)
 
@@ -416,43 +397,31 @@ async def handle_document(message: types.Message, state: FSMContext):
         ])
 
         size_kb = round(os.path.getsize(output_name) / 1024, 1)
-        caption = f"""✅ **{action_name} Successful!**
+        caption = f"""✅ {action_name} Successful!
 
-📁 **File:** `{output_name}`
-📦 **Size:** `{size_kb} KB`
+📁 File: {output_name}
+📦 Size: {size_kb} KB
 
-🛡 **Protected / Scanned with:**
-• 🚫 Anti-Debug Layer
-• 🔍 DevTools Detection
-• 🛡 System Strict Mode
-• 🔐 Premium RDX Core
-• ⚡ 100% Invisible JS
+💀 Powered by @RDX_OWNER_7"""
 
-🔒 _Your code has been processed._
-💀 **Powered by @RDX_OWNER_7**"""
-
-        await message.reply_document(FSInputFile(output_name), caption=caption, reply_markup=kb, parse_mode="Markdown")
+        await message.reply_document(FSInputFile(output_name), caption=caption, reply_markup=kb)
         
         os.remove(output_name)
         await msg.delete()
-        await state.clear()
+        user_states[user_id] = None
+        user_encrypt_state[user_id] = None
         
     except Exception as e:
-        await msg.edit_text(f"❌ **System Error:**\n`{str(e)[:100]}`\n\nPlease try again.", parse_mode="Markdown")
-        await state.clear()
+        await msg.edit_text(f"❌ System Error:\n{str(e)[:100]}\n\nPlease try again.")
+        user_states[user_id] = None
+        user_encrypt_state[user_id] = None
 
 # ================= RUN =================
-async def main():
-    logging.basicConfig(level=logging.INFO)
-    await bot.delete_webhook(drop_pending_updates=True)
+if __name__ == "__main__":
     print("=" * 60)
     print("🔥 RDX MASTER SYSTEM BOT STARTED")
     print(f"📌 Channel 1: @{CHANNEL_1_USERNAME}")
     print(f"📌 Channel 2: @{CHANNEL_2_USERNAME}")
-    print(f"🔑 DECODER PASS: {DECODER_PASSWORD}")
     print("💀 Powered by @RDX_OWNER_7")
     print("=" * 60)
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    executor.start_polling(dp, skip_updates=True)
