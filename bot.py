@@ -30,7 +30,7 @@ ITERATIONS = 100000
 KEY_LEN = 32
 DECODER_PASSWORD = "𝕽𝕯𝖃 𝕺𝖂𝕹𝕰𝕽"
 
-bot = Bot(API_TOKEN)
+bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
 
 # ================= STATES =================
@@ -182,6 +182,8 @@ async def setup_decoder(call: CallbackQuery, state: FSMContext):
     elif proto == "dec_t4":
         await state.set_state(BotStates.wait_for_t4_file)
         title = "04: VISUAL ENGINE (Perfect Visual)"
+    else:
+        return
         
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="← CANCEL", callback_data="back_main")]])
     await call.message.edit_text(
@@ -317,7 +319,7 @@ def run_v3_engine(html_content):
                 b64_try = base64.b64decode(decoded).decode('utf-8')
                 if "html" in b64_try.lower(): return b64_try
             except: pass
-    return run_dom_engine(html_content) # Fallback to DOM engine
+    return run_dom_engine(html_content)
 
 def run_nexus_engine(html_content):
     # Look for pure base64 document.write payloads
@@ -334,7 +336,7 @@ def run_nexus_engine(html_content):
             dec = base64.b64decode(match.group(1)).decode('utf-8', errors='ignore')
             if "html" in dec.lower(): return dec
         except: pass
-    return run_dom_engine(html_content) # Fallback to DOM engine
+    return run_dom_engine(html_content)
 
 def run_visual_engine(html_content):
     res = run_dom_engine(html_content)
@@ -396,7 +398,6 @@ async def handle_document(message: types.Message, state: FSMContext):
             elif current_state == BotStates.wait_for_t4_file.state:
                 final_code = run_visual_engine(html_code)
 
-            # AGAR DECRYPT NAHI HUA TO ERROR DENA HAI, SAME FILE WAPAS NAHI BHEJNA!
             if not final_code:
                 await msg.delete()
                 kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="← BACK", callback_data="back_main")]])
@@ -414,7 +415,6 @@ async def handle_document(message: types.Message, state: FSMContext):
             [InlineKeyboardButton(text="← BACK TO MENU", callback_data="back_main")]
         ])
 
-        # PREMIUM SCREENSHOT STYLE CAPTION
         size_kb = round(os.path.getsize(output_name) / 1024, 1)
         caption = f"""✅ **{action_name} Successful!**
 
